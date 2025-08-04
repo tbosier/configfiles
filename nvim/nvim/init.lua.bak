@@ -1,0 +1,188 @@
+-- ~/.config/nvim/init.lua.minimal
+
+-- Set leader key
+vim.g.mapleader = " "
+
+-- Basic Options
+vim.o.number = true
+vim.o.termguicolors = true
+vim.o.completeopt = "menu,menuone,noselect"
+
+vim.cmd([[
+  augroup TexFiletype
+    autocmd!
+    autocmd BufRead,BufNewFile *.tex set filetype=tex
+  augroup END
+]])
+
+
+
+
+-- Plugin Manager: lazy.nvim
+local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
+if not vim.loop.fs_stat(lazypath) then
+  vim.fn.system({
+    "git",
+    "clone", "--filter=blob:none",
+    "https://github.com/folke/lazy.nvim.git",
+    "--branch=stable",
+    lazypath,
+  })
+end
+vim.opt.rtp:prepend(lazypath)
+
+-- Initialize Plugins with lazy.nvim
+require("lazy").setup({
+  -- Snippet engine
+  { "L3MON4D3/LuaSnip" },
+
+  -- Completion framework
+  { "hrsh7th/nvim-cmp" },
+
+  -- Completion sources
+  { "hrsh7th/cmp-nvim-lsp" },
+  { "saadparwaiz1/cmp_luasnip" },
+
+  -- Optional: Predefined snippets
+  { "rafamadriz/friendly-snippets" },
+
+  -- Telescope and its LuaSnip extension
+  {
+    "nvim-telescope/telescope.nvim",
+    dependencies = { "nvim-lua/plenary.nvim" },
+  },
+  {
+    "benfowler/telescope-luasnip.nvim",
+    dependencies = { "nvim-telescope/telescope.nvim" },
+    config = function()
+      require("telescope").load_extension("luasnip")
+    end,
+  },
+})
+
+-- LuaSnip configuration
+local luasnip = require("luasnip")
+
+-- Load VSCode-style snippets (including friendly-snippets)
+require("luasnip.loaders.from_vscode").lazy_load()
+
+-- Load Lua-based snippets
+require("luasnip.loaders.from_lua").load({ paths = "/home/taylo/.config/nvim/lua/snippets/" })
+
+-- LuaSnip setup
+luasnip.config.set_config({
+  history = true,
+  updateevents = "TextChanged,TextChangedI",
+})
+
+-- nvim-cmp setup
+local cmp = require("cmp")
+
+-- Helper function to check if there's a word before the cursor
+local has_words_before = function()
+  local line, col = unpack(vim.api.nvim_win_get_cursor(0))
+  if col == 0 then
+    return false
+  end
+  local current_line = vim.api.nvim_buf_get_lines(0, line - 1, line, true)[1]
+  return current_line:sub(col, col):match("%s") == nil
+end
+
+cmp.setup({
+  snippet = {
+    expand = function(args)
+      luasnip.lsp_expand(args.body)
+    end,
+  },
+  mapping = {
+    -- Confirm selection with Enter
+    ['<CR>'] = cmp.mapping.confirm({ select = true }),
+
+    -- Navigate through completion items
+    ['<C-n>'] = cmp.mapping.select_next_item({ behavior = cmp.SelectBehavior.Insert }),
+    ['<C-p>'] = cmp.mapping.select_prev_item({ behavior = cmp.SelectBehavior.Insert }),
+
+    -- Scroll documentation
+    ['<C-d>'] = cmp.mapping.scroll_docs(-4),
+    ['<C-f>'] = cmp.mapping.scroll_docs(4),
+
+    -- Trigger completion menu
+    ['<C-Space>'] = cmp.mapping.complete(),
+
+    -- Navigate snippet placeholders
+    ['<Tab>'] = cmp.mapping(function(fallback)
+      if cmp.visible() then
+        cmp.select_next_item()
+      elseif luasnip.expand_or_jumpable() then
+        luasnip.expand_or_jump()
+      elseif has_words_before() then
+        cmp.complete()
+      else
+        fallback()
+      end
+    end, { "i", "s" }),
+
+    ['<S-Tab>'] = cmp.mapping(function(fallback)
+      if cmp.visible() then
+        cmp.select_prev_item()
+      elseif luasnip.jumpable(-1) then
+        luasnip.jump(-1)
+      else
+        fallback()
+      end
+    end, { "i", "s" }),
+  },
+  sources = {
+    { name = 'nvim_lsp' },
+    { name = 'luasnip' },
+    { name = 'buffer' },
+    { name = 'path' },
+  },
+  formatting = {
+    fields = { "abbr", "kind", "menu" },
+    format = function(entry, vim_item)
+      -- Define icons for different kinds
+      local kind_icons = {
+        Text = "",
+        Method = "m",
+        Function = "",
+        Constructor = "",
+        Field = "",
+        Variable = "",
+        Class = "",
+        Interface = "",
+        Module = "",
+        Property = "",
+        Unit = "",
+        Value = "",
+        Enum = "",
+        Keyword = "",
+        Snippet = "",
+        Color = "",
+        File = "",
+        Reference = "",
+        Folder = "",
+        EnumMember = "",
+        Constant = "",
+        Struct = "",
+        Event = "",
+        Operator = "",
+        TypeParameter = "",
+      }
+
+      vim_item.kind = string.format("%s", kind_icons[vim_item.kind] or vim_item.kind)
+      vim_item.menu = ({
+        nvim_lsp = "[LSP]",
+        luasnip = "[LuaSnip]",
+        buffer = "[Buffer]",
+        path = "[Path]",
+      })[entry.source.name]
+
+      return vim_item
+    end,
+  },
+  window = {
+    documentation = cmp.config.window.bordered(),
+    completion = cmp.config.window.bordered(),
+  },
+})
