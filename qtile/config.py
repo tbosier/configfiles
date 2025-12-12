@@ -28,9 +28,18 @@ from libqtile import bar, layout, qtile, widget
 from libqtile.config import Click, Drag, Group, Key, Match, Screen
 from libqtile.lazy import lazy
 from libqtile.utils import guess_terminal
+import os
+import subprocess
+from libqtile import hook
 
+
+
+@hook.subscribe.startup_once
+def autostart():
+    home = os.path.expanduser("~")
+    subprocess.Popen(["/bin/sh",home + "/.config/qtile/autostart.sh"])
 mod = "mod4"
-terminal = guess_terminal()
+terminal = "kitty"
 
 colors = [
     ["#282c34", "#282c34"],  # Panel background
@@ -48,25 +57,23 @@ keys = [
     # A list of available commands that can be bound to keys can be found
     # at https://docs.qtile.org/en/latest/manual/config/lazy.html
     # Switch between windows
-    Key([mod], "h", lazy.layout.left(), desc="Move focus to left"),
-    Key([mod], "l", lazy.layout.right(), desc="Move focus to right"),
-    Key([mod], "j", lazy.layout.down(), desc="Move focus down"),
-    Key([mod], "k", lazy.layout.up(), desc="Move focus up"),
-    Key([mod], "space", lazy.layout.next(), desc="Move window focus to other window"),
-    # Move windows between left/right columns or move up/down in current stack.
-    # Moving out of range in Columns layout will create new column.
-    Key([mod, "shift"], "h", lazy.layout.shuffle_left(), desc="Move window to the left"),
-    Key([mod, "shift"], "l", lazy.layout.shuffle_right(), desc="Move window to the right"),
-    Key([mod, "shift"], "j", lazy.layout.shuffle_down(), desc="Move window down"),
-    Key([mod, "shift"], "k", lazy.layout.shuffle_up(), desc="Move window up"),
-    # Grow windows. If current window is on the edge of screen and direction
-    # will be to screen edge - window would shrink.
-    Key([mod, "control"], "h", lazy.layout.grow_left(), desc="Grow window to the left"),
-    Key([mod, "control"], "l", lazy.layout.grow_right(), desc="Grow window to the right"),
-    Key([mod, "control"], "j", lazy.layout.grow_down(), desc="Grow window down"),
-    Key([mod, "control"], "k", lazy.layout.grow_up(), desc="Grow window up"),
-    Key([mod], "n", lazy.layout.normalize(), desc="Reset all window sizes"),
-    # Toggle between split and unsplit sides of stack.
+    Key([mod], "h", lazy.layout.left()),
+    Key([mod], "l", lazy.layout.right()),
+    Key([mod], "j", lazy.layout.down()),
+    Key([mod], "k", lazy.layout.up()),
+    Key([mod, "shift"], "h", lazy.layout.swap_left()),
+    Key([mod, "shift"], "l", lazy.layout.swap_right()),
+    Key([mod, "shift"], "j", lazy.layout.shuffle_down()),
+    Key([mod, "shift"], "k", lazy.layout.shuffle_up()),
+    Key([mod], "l", lazy.spawn("i3lock -c 000000")),
+    Key([mod], "i", lazy.layout.grow()),
+    Key([mod], "m", lazy.layout.shrink()),
+    Key([mod], "n", lazy.layout.reset()),
+    Key([mod, "shift"], "n", lazy.layout.normalize()),
+    Key([mod], "o", lazy.layout.maximize()),
+    Key([mod, "shift"], "s", lazy.layout.toggle_auto_maximize()),
+    Key([mod, "shift"], "space", lazy.layout.flip()),
+        # Toggle between split and unsplit sides of stack.
     # Split = all windows displayed
     # Unsplit = 1 window displayed, like Max layout, but still with
     # multiple stack panes
@@ -90,6 +97,7 @@ keys = [
     Key([mod, "control"], "r", lazy.reload_config(), desc="Reload the config"),
     Key([mod, "control"], "q", lazy.shutdown(), desc="Shutdown Qtile"),
     Key([mod], "r", lazy.spawncmd(), desc="Spawn a command using a prompt widget"),
+    Key(["control", "shift"], "t", lazy.spawncmd(), desc="Spawn a command using a prompt widget 2nd")
 ]
 
 # Add key bindings to switch VTs in Wayland.
@@ -132,14 +140,21 @@ for i in groups:
         ]
     )
 
+layout_theme = {
+    "border_width":3,
+    "margin": 15,
+    "border_focus":"FFFFFF",
+    "border_normal":"CCCCCC"
+}
+    
 layouts = [
-    layout.Columns(border_focus_stack=["#d75f5f", "#8f3d3d"], border_width=4),
-    layout.Max(),
+    #layout.Columns(border_focus_stack=["#d75f5f", "#8f3d3d"], border_width=4),
+    #layout.Max(),
     # Try more layouts by unleashing below layouts.
     # layout.Stack(num_stacks=2),
     # layout.Bsp(),
     # layout.Matrix(),
-    # layout.MonadTall(),
+    layout.MonadTall(**layout_theme),
     # layout.MonadWide(),
     # layout.RatioTile(),
     # layout.Tile(),
@@ -154,12 +169,11 @@ widget_defaults = dict(
     padding=3,
 )
 extension_defaults = widget_defaults.copy()
-
 screens = [
     Screen(
         wallpaper='~/Pictures/apostle.png',
         wallpaper_mode='stretch',
-        bottom=bar.Bar(
+        top=bar.Bar(
             [
                 widget.CurrentLayout(),
                 widget.GroupBox(
@@ -179,7 +193,6 @@ screens = [
                     this_screen_border=colors[5],
                     other_current_screen_border=colors[4],
                     other_screen_border=colors[5],
-                    
                 ),
                 widget.Prompt(),
                 widget.WindowName(
@@ -193,28 +206,54 @@ screens = [
                     },
                     name_transform=lambda name: name.upper(),
                 ),
-                #widget.TextBox("default config", name="default"),
-                #widget.TextBox("Press &lt;M-r&gt; to spawn", foreground="#d75f5f"),
-                # NB Systray is incompatible with Wayland, consider using StatusNotifier instead
-                # widget.StatusNotifier(),
                 widget.Systray(),
-                widget.Clock(format="%Y-%m-%d %a %I:%M %p",
-                             fontsize=15),
-                #widget.QuickExit(),
-                widget.Memory(fontsize=15),
-                widget.Battery(fontsize=15),
+                widget.Clock(format="%Y-%m-%d %a %I:%M %p", fontsize=15,
+                             ),
+                widget.Memory(measure_mem='G'), 
                 widget.Image(filename='~/Pictures/archlogo.png'),
-                
             ],
             50,
             background=colors[0]
-            # border_width=[2, 0, 2, 0],  # Draw top and bottom borders
-            # border_color=["ff00ff", "000000", "ff00ff", "000000"]  # Borders are magenta
         ),
-        # You can uncomment this variable if you see that on X11 floating resize/moving is laggy
-        # By default we handle these events delayed to already improve performance, however your system might still be struggling
-        # This variable is set to None (no cap) by default, but you can set it to 60 to indicate that you limit it to 60 events per second
-        # x11_drag_polling_rate = 60,
+    ),
+    Screen(
+        wallpaper='~/Pictures/second_wallpaper.png',  # Example wallpaper for the second monitor
+        wallpaper_mode='stretch',
+        top=bar.Bar(
+            [
+                widget.CurrentLayout(),
+                widget.GroupBox(
+                    font="Ubuntu Bold",
+                    fontsize=12,
+                    margin_y=3,
+                    margin_x=0,
+                    padding_y=5,
+                    padding_x=3,
+                    borderwidth=3,
+                    active=colors[2],
+                    inactive=colors[3],
+                    rounded=False,
+                    highlight_color=colors[1],
+                    highlight_method="line",
+                    this_current_screen_border=colors[4],
+                    this_screen_border=colors[5],
+                    other_current_screen_border=colors[4],
+                    other_screen_border=colors[5],
+                ),
+                widget.Prompt(),
+                widget.WindowName(
+                    foreground=colors[6],
+                    padding=5,
+                    fontsize=15,
+                ),
+                widget.Systray(),
+                widget.Clock(format="%Y-%m-%d %a %I:%M %p", fontsize=15),
+                widget.Memory(measure_mem='G'), 
+                widget.Image(filename='~/Pictures/second_archlogo.png'),
+            ],
+            50,
+            background=colors[0]
+        ),
     ),
 ]
 
