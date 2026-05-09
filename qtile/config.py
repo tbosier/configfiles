@@ -38,6 +38,11 @@ from libqtile import hook
 def autostart():
     home = os.path.expanduser("~")
     subprocess.Popen(["/bin/sh",home + "/.config/qtile/autostart.sh"])
+    subprocess.Popen([
+    "xrandr",
+    "--output", "HDMI-0", "--primary", "--auto",
+    "--output", "DP-5", "--auto", "--right-of", "HDMI-0"
+    ])
 mod = "mod4"
 terminal = "kitty"
 

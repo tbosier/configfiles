@@ -9,7 +9,7 @@ return {
 
   config = function()
     -- Keymaps
-    vim.keymap.set("n", "<C-n>", ":Neotree filesystem reveal left<CR>", {})
+    vim.keymap.set("n", "<leader>e", ":Neotree filesystem reveal left<CR>", {})
     vim.keymap.set("n", "<leader>1", "<C-w>h", { desc = "Focus NeoTree" })
     vim.keymap.set("n", "<leader>2", "<C-w>l", { desc = "Focus code window" })
 

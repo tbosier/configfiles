@@ -21,5 +21,11 @@ vim.keymap.set('n', '<leader>tt', ':belowright split | term<CR>', { noremap = tr
 vim.keymap.set('t', '<Esc>', [[<C-\><C-n>]], { noremap = true }) -- Esc leaves terminal mode
 vim.keymap.set('n', '<C-h>', '<C-w>h')
 
+
+vim.opt.number = true
+vim.opt.relativenumber = true
+vim.opt.cursorline = true
+vim.opt.signcolumn = "yes"
+vim.opt.clipboard = "unnamedplus"
 require("vim-options")
 require("lazy").setup("plugins")
