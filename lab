@@ -1,69 +1,171 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# ── config: the lightweight version of .lab.yaml ────────────────────────────
+AGENT_CMD="${LAB_AGENT:-codex}"      # how to invoke your coding agent
+TEST_CMD="${LAB_TEST:-pytest -q}"    # gate that must pass before integrate
+
 cmd="${1:-}"
 
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-if [ -z "$repo_root" ]; then
-  echo "Not inside a git repo"
-  exit 1
-fi
+[ -z "$repo_root" ] && { echo "Not inside a git repo"; exit 1; }
 
 repo_name="$(basename "$repo_root")"
 worktree_root="$(dirname "$repo_root")/${repo_name}-worktrees"
+lab_dir="$worktree_root/_lab"        # scratch: prompts + handoff artifacts.
+mkdir -p "$lab_dir"                  # OUTSIDE the repo — never committed.
+
+ensure_clean() {
+  if [ -n "$(git status --porcelain)" ]; then
+    echo "Working tree is dirty. Commit/stash first."
+    git status --short
+    exit 1
+  fi
+}
+
+main_branch() {
+  git show-ref --verify --quiet refs/heads/main && echo main || echo master
+}
+
+# create worktree+branch for <name> if missing; echo its path
+worktree_for() {
+  local name="$1" branch="ai/$1" path="$worktree_root/$1"
+  [ -d "$path" ] || git worktree add "$path" -b "$branch" >/dev/null
+  echo "$path"
+}
 
 case "$cmd" in
   init)
-    git init
+    git init -q
     git add .
-    git commit -m "initial commit" || true
+    git commit -qm "initial commit" || true
     mkdir -p "$worktree_root"
-    echo "Lab initialized at $worktree_root"
+    echo "Lab initialized."
+    echo "  worktrees: $worktree_root   (sibling of repo — nothing to gitignore)"
+    echo "  scratch:   $lab_dir         (prompts + review artifacts live here)"
     ;;
 
+  # ── ensemble / parallel exploration: N agents, same task, keep the best ──
   fork)
     name="${2:?usage: lab fork <name>}"
+    path="$(worktree_for "$name")"
+    echo "Created $path on branch ai/$name"
+    ;;
+
+  # ── pipeline stage: reviewer (read-only, writes structured findings) ─────
+  review)
+    name="${2:-reviewer}"
+    path="$(worktree_for "$name")"
+    prompt="$lab_dir/${name}.prompt.md"
+    out="$lab_dir/REVIEW.md"
+    cat > "$prompt" <<EOF
+Review this repo against the project spec. Do NOT modify implementation code.
+
+Write your findings to this exact path: $out
+
+Format every finding as:
+  [SEVERITY] id — short title
+    why it is wrong
+    exact recommended fix
+SEVERITY is one of: MUSTFIX, SHOULDFIX, NIT
+
+Cover: correctness bugs, spec violations, weak/fake tests, JAX shape/JIT
+risks, reward double-counting, baseline fairness, fp32/int32 accounting.
+State explicitly whether the current results could be bullshit.
+EOF
+    echo "Reviewer ready on ai/$name. Findings -> $out"
+    echo "  lab run $name      (or: cd $path && $AGENT_CMD < $prompt)"
+    ;;
+
+  # ── pipeline stage: fixer (reads REVIEW.md from scratch, not from main) ──
+  fix)
+    name="${2:-fixer}"
+    path="$(worktree_for "$name")"
+    prompt="$lab_dir/${name}.prompt.md"
+    review="$lab_dir/REVIEW.md"
+    out="$lab_dir/REVIEW_FIXES.md"
+    [ -f "$review" ] || { echo "No $review yet — run 'lab review' first."; exit 1; }
+    cat > "$prompt" <<EOF
+Read the review at: $review
+Fix ONLY items marked [MUSTFIX]. Do not add features. Do not touch
+unrelated code.
+
+After each fix, run: $TEST_CMD
+
+Write to: $out
+  issue id | fix | command that proves it | remaining risk
+Commit your changes on this branch.
+EOF
+    echo "Fixer ready on ai/$name. Reads $review"
+    echo "  lab run $name      (or: cd $path && $AGENT_CMD < $prompt)"
+    ;;
+
+  # ── actually invoke the agent in its worktree with its prompt ────────────
+  run)
+    name="${2:?usage: lab run <name> [prompt.md]}"
+    path="$worktree_root/$name"
+    [ -d "$path" ] || { echo "No worktree '$name' — create it first."; exit 1; }
+    prompt="${3:-$lab_dir/${name}.prompt.md}"
+    [ -f "$prompt" ] || { echo "No prompt at $prompt"; exit 1; }
+    ( cd "$path" && $AGENT_CMD < "$prompt" )
+    ;;
+
+  # ── gated merge: tests must pass in the branch before it lands on main ───
+  integrate)
+    name="${2:?usage: lab integrate <name>}"
     branch="ai/$name"
     path="$worktree_root/$name"
-    mkdir -p "$worktree_root"
-    git worktree add "$path" -b "$branch"
-    echo "Created $path on branch $branch"
+    echo "Gate: $TEST_CMD  (in $path)"
+    ( cd "$path" && eval "$TEST_CMD" ) || { echo "Tests failed — not integrating."; exit 1; }
+    ensure_clean
+    git checkout -q "$(main_branch)"
+    git merge --no-ff "$branch"
+    echo "Integrated $branch into $(main_branch)"
+    ;;
+
+  # ── raw merge escape hatch (no gate) ────────────────────────────────────
+  merge)
+    name="${2:?usage: lab merge <name>}"
+    ensure_clean
+    git checkout -q "$(main_branch)"
+    git merge "ai/$name"
+    ;;
+
+  status)
+    echo "== Worktrees =="; git worktree list
+    echo; echo "== Branches ==";  git branch --list "ai/*"
+    echo; echo "== Artifacts =="; ls -1 "$lab_dir" 2>/dev/null || echo "  (none)"
     ;;
 
   list)
     git worktree list
     ;;
 
-  merge)
-    name="${2:?usage: lab merge <name>}"
-    branch="ai/$name"
-    git checkout main 2>/dev/null || git checkout master
-    git merge "$branch"
+  open)
+    name="${2:?usage: lab open <name>}"
+    cd "$worktree_root/$name"
+    exec "${SHELL:-bash}"
     ;;
 
   remove)
     name="${2:?usage: lab remove <name>}"
-    path="$worktree_root/$name"
-    git worktree remove "$path"
+    git worktree remove "$worktree_root/$name"
     git branch -d "ai/$name" || true
-    ;;
-
-  open)
-    name="${2:?usage: lab open <name>}"
-    path="$worktree_root/$name"
-    cd "$path"
-    exec "${SHELL:-bash}"
     ;;
 
   *)
     cat <<EOF
 usage:
   lab init
-  lab fork <name>
-  lab list
-  lab open <name>
-  lab merge <name>
-  lab remove <name>
+  lab fork <name>          parallel exploration (isolated branch)
+  lab review [name]        write structured review -> _lab/REVIEW.md
+  lab fix [name]           fix MUSTFIX items from _lab/REVIEW.md
+  lab run <name> [prompt]  invoke \$LAB_AGENT in that worktree
+  lab integrate <name>     run tests, then merge to main (gated)
+  lab merge <name>         merge to main (no gate)
+  lab status | list | open <name> | remove <name>
+
+env: LAB_AGENT=$AGENT_CMD   LAB_TEST="$TEST_CMD"
 EOF
     ;;
 esac
