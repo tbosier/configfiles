@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cmd="${1:-}"
+
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -z "$repo_root" ]; then
+  echo "Not inside a git repo"
+  exit 1
+fi
+
+repo_name="$(basename "$repo_root")"
+worktree_root="$(dirname "$repo_root")/${repo_name}-worktrees"
+
+case "$cmd" in
+  init)
+    git init
+    git add .
+    git commit -m "initial commit" || true
+    mkdir -p "$worktree_root"
+    echo "Lab initialized at $worktree_root"
+    ;;
+
+  fork)
+    name="${2:?usage: lab fork <name>}"
+    branch="ai/$name"
+    path="$worktree_root/$name"
+    mkdir -p "$worktree_root"
+    git worktree add "$path" -b "$branch"
+    echo "Created $path on branch $branch"
+    ;;
+
+  list)
+    git worktree list
+    ;;
+
+  merge)
+    name="${2:?usage: lab merge <name>}"
+    branch="ai/$name"
+    git checkout main 2>/dev/null || git checkout master
+    git merge "$branch"
+    ;;
+
+  remove)
+    name="${2:?usage: lab remove <name>}"
+    path="$worktree_root/$name"
+    git worktree remove "$path"
+    git branch -d "ai/$name" || true
+    ;;
+
+  open)
+    name="${2:?usage: lab open <name>}"
+    path="$worktree_root/$name"
+    cd "$path"
+    exec "${SHELL:-bash}"
+    ;;
+
+  *)
+    cat <<EOF
+usage:
+  lab init
+  lab fork <name>
+  lab list
+  lab open <name>
+  lab merge <name>
+  lab remove <name>
+EOF
+    ;;
+esac
