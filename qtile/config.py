@@ -79,6 +79,56 @@ screenshot_command = (
     "else rm -f \"$file\"; fi'"
 )
 
+
+def gpu_status():
+    try:
+        output = subprocess.check_output(
+            [
+                "nvidia-smi",
+                "--query-gpu=memory.used,memory.total,utilization.gpu,temperature.gpu",
+                "--format=csv,noheader,nounits",
+            ],
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=2,
+        ).splitlines()[0]
+        used, total, utilization, temperature = [
+            float(value.strip()) for value in output.split(",")
+        ]
+        return (
+            f"󰢮 {utilization:.0f}% "
+            f"{used / 1024:.1f}/{total / 1024:.1f}G "
+            f"{temperature:.0f}°"
+        )
+    except (OSError, subprocess.SubprocessError, ValueError, IndexError):
+        return "󰢮 N/A"
+
+
+def volume_status():
+    try:
+        output = subprocess.check_output(
+            ["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"],
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=2,
+        ).strip()
+        volume = round(float(output.split()[1]) * 100)
+        muted = "[MUTED]" in output
+
+        if muted:
+            icon = "󰝟"
+        elif volume < 34:
+            icon = "󰕿"
+        elif volume < 67:
+            icon = "󰖀"
+        else:
+            icon = "󰕾"
+
+        return f"{icon} {volume}%"
+    except (OSError, subprocess.SubprocessError, ValueError, IndexError):
+        return "󰖁 N/A"
+
+
 keys = [
     # A list of available commands that can be bound to keys can be found
     # at https://docs.qtile.org/en/latest/manual/config/lazy.html
@@ -145,7 +195,18 @@ for vt in range(1, 8):
     )
 
 
-groups = [Group(i) for i in "123456789"]
+group_labels = [
+    ("1", "HERDR"),
+    ("2", "FIREFOX"),
+    ("3", "OBSIDIAN"),
+    ("4", "PROJECT"),
+    ("5", "GAMES"),
+    ("6", "MEDIA"),
+    ("7", "FILES"),
+    ("8", "CHAT"),
+    ("9", "MISC"),
+]
+groups = [Group(name, label=f"{name}:{label}") for name, label in group_labels]
 
 for i in groups:
     keys.extend(
@@ -234,11 +295,58 @@ def make_bar(primary=False):
             padding=12,
             max_chars=90,
         ),
+        widget.Net(
+            format="󰖩 ↓{down:.1f}{down_suffix} ↑{up:.1f}{up_suffix}",
+            update_interval=2,
+            foreground=colors["teal"],
+            padding=8,
+        ),
+        widget.GenPollText(
+            func=volume_status,
+            update_interval=1,
+            foreground=colors["green"],
+            padding=8,
+            mouse_callbacks={
+                "Button1": lazy.spawn("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"),
+                "Button4": lazy.spawn(
+                    "wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+"
+                ),
+                "Button5": lazy.spawn(
+                    "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"
+                ),
+            },
+        ),
+        widget.Sep(
+            linewidth=1,
+            padding=7,
+            foreground=colors["surface1"],
+        ),
+        widget.CPU(
+            format=" {load_percent:.0f}%",
+            update_interval=2,
+            foreground=colors["blue"],
+            padding=8,
+        ),
+        widget.ThermalSensor(
+            tag_sensor="Tctl",
+            format=" {temp:.0f}{unit}",
+            update_interval=5,
+            threshold=80,
+            foreground=colors["green"],
+            foreground_alert=colors["red"],
+            padding=8,
+        ),
         widget.Memory(
-            format="󰍛 {MemUsed:.1f}G",
+            format="󰍛 {MemUsed:.1f}/{MemTotal:.1f}G",
             measure_mem="G",
             foreground=colors["yellow"],
-            padding=10,
+            padding=8,
+        ),
+        widget.GenPollText(
+            func=gpu_status,
+            update_interval=3,
+            foreground=colors["mauve"],
+            padding=8,
         ),
     ]
 
