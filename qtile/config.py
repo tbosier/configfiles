@@ -24,39 +24,60 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from libqtile import bar, layout, qtile, widget
-from libqtile.config import Click, Drag, Group, Key, Match, Screen
-from libqtile.lazy import lazy
-from libqtile.utils import guess_terminal
 import os
 import subprocess
-from libqtile import hook
 
-
+from libqtile import bar, hook, layout, qtile, widget
+from libqtile.config import Click, Drag, Group, Key, Match, Screen
+from libqtile.lazy import lazy
 
 @hook.subscribe.startup_once
 def autostart():
     home = os.path.expanduser("~")
-    subprocess.Popen(["/bin/sh",home + "/.config/qtile/autostart.sh"])
-    subprocess.Popen([
-    "xrandr",
-    "--output", "HDMI-0", "--primary", "--auto",
-    "--output", "DP-5", "--auto", "--right-of", "HDMI-0"
-    ])
+    subprocess.Popen(["/bin/sh", home + "/.config/qtile/autostart.sh"])
+    subprocess.Popen(
+        [
+            "xrandr",
+            "--output",
+            "HDMI-0",
+            "--primary",
+            "--auto",
+            "--output",
+            "DP-5",
+            "--auto",
+            "--right-of",
+            "HDMI-0",
+        ]
+    )
+
+
 mod = "mod4"
 terminal = "kitty"
 
-colors = [
-    ["#282c34", "#282c34"],  # Panel background
-    ["#1c1f24", "#1c1f24"],  # Background for current screen tab
-    ["#dfdfdf", "#dfdfdf"],  # Font color for group names
-    ["#ff6c6b", "#ff6c6b"],  # Border line color for current tab
-    ["#98be65", "#98be65"],  # Border line color for other tabs and odd widgets
-    ["#51afef", "#51afef"],  # Border line color for even widgets
-    ["#c678dd", "#c678dd"],  # Window name
-]
+colors = {
+    "base": "#1e1e2e",
+    "mantle": "#181825",
+    "surface0": "#313244",
+    "surface1": "#45475a",
+    "overlay0": "#6c7086",
+    "subtext0": "#a6adc8",
+    "subtext1": "#bac2de",
+    "text": "#cdd6f4",
+    "red": "#f38ba8",
+    "yellow": "#f9e2af",
+    "green": "#a6e3a1",
+    "blue": "#89b4fa",
+    "mauve": "#cba6f7",
+    "teal": "#94e2d5",
+}
 
-
+screenshot_command = (
+    "sh -c 'dir=\"$HOME/Pictures/Screenshots\"; mkdir -p \"$dir\"; "
+    "file=\"$dir/$(date +%Y-%m-%d_%H-%M-%S).png\"; "
+    "if maim -s \"$file\"; then "
+    "xclip -selection clipboard -t image/png -i \"$file\"; "
+    "else rm -f \"$file\"; fi'"
+)
 
 keys = [
     # A list of available commands that can be bound to keys can be found
@@ -70,13 +91,13 @@ keys = [
     Key([mod, "shift"], "l", lazy.layout.swap_right()),
     Key([mod, "shift"], "j", lazy.layout.shuffle_down()),
     Key([mod, "shift"], "k", lazy.layout.shuffle_up()),
-    Key([mod], "l", lazy.spawn("i3lock -c 000000")),
+    Key([mod, "control"], "l", lazy.spawn("i3lock -c 1e1e2e"), desc="Lock screen"),
     Key([mod], "i", lazy.layout.grow()),
     Key([mod], "m", lazy.layout.shrink()),
     Key([mod], "n", lazy.layout.reset()),
     Key([mod, "shift"], "n", lazy.layout.normalize()),
     Key([mod], "o", lazy.layout.maximize()),
-    Key([mod, "shift"], "s", lazy.layout.toggle_auto_maximize()),
+    Key([mod, "shift"], "a", lazy.layout.toggle_auto_maximize()),
     Key([mod, "shift"], "space", lazy.layout.flip()),
         # Toggle between split and unsplit sides of stack.
     # Split = all windows displayed
@@ -102,7 +123,12 @@ keys = [
     Key([mod, "control"], "r", lazy.reload_config(), desc="Reload the config"),
     Key([mod, "control"], "q", lazy.shutdown(), desc="Shutdown Qtile"),
     Key([mod], "r", lazy.spawncmd(), desc="Spawn a command using a prompt widget"),
-    Key(["control", "shift"], "t", lazy.spawncmd(), desc="Spawn a command using a prompt widget 2nd")
+    Key(
+        [mod, "shift"],
+        "s",
+        lazy.spawn(screenshot_command),
+        desc="Select a screenshot, save it, and copy it to the clipboard",
+    ),
 ]
 
 # Add key bindings to switch VTs in Wayland.
@@ -146,10 +172,10 @@ for i in groups:
     )
 
 layout_theme = {
-    "border_width":3,
-    "margin": 15,
-    "border_focus":"FFFFFF",
-    "border_normal":"CCCCCC"
+    "border_width": 2,
+    "margin": 10,
+    "border_focus": colors["blue"],
+    "border_normal": colors["surface0"],
 }
     
 layouts = [
@@ -169,96 +195,77 @@ layouts = [
 ]
 
 widget_defaults = dict(
-    font="sans",
-    fontsize=12,
-    padding=3,
+    font="MesloLGS Nerd Font",
+    fontsize=13,
+    foreground=colors["text"],
+    padding=6,
 )
 extension_defaults = widget_defaults.copy()
+
+
+def make_bar(primary=False):
+    widgets = [
+        widget.CurrentLayout(foreground=colors["mauve"], padding=10),
+        widget.GroupBox(
+            fontsize=14,
+            margin_y=5,
+            margin_x=2,
+            padding_y=2,
+            padding_x=7,
+            borderwidth=2,
+            active=colors["text"],
+            inactive=colors["overlay0"],
+            rounded=True,
+            highlight_method="block",
+            highlight_color=colors["surface0"],
+            this_current_screen_border=colors["surface1"],
+            this_screen_border=colors["surface0"],
+            other_current_screen_border=colors["surface1"],
+            other_screen_border=colors["surface0"],
+            urgent_alert_method="block",
+            urgent_border=colors["red"],
+        ),
+        widget.Prompt(
+            foreground=colors["text"],
+            background=colors["surface0"],
+        ),
+        widget.WindowName(
+            foreground=colors["subtext1"],
+            padding=12,
+            max_chars=90,
+        ),
+        widget.Memory(
+            format="󰍛 {MemUsed:.1f}G",
+            measure_mem="G",
+            foreground=colors["yellow"],
+            padding=10,
+        ),
+    ]
+
+    if primary:
+        widgets.append(widget.Systray(padding=8))
+
+    widgets.append(
+        widget.Clock(
+            format="󰥔 %a %b %-d  %-I:%M %p",
+            foreground=colors["blue"],
+            padding=10,
+        )
+    )
+
+    return bar.Bar(widgets, 36, background=colors["base"], opacity=0.97)
+
+
 screens = [
     Screen(
-        wallpaper='~/Pictures/apostle.png',
-        wallpaper_mode='stretch',
-        top=bar.Bar(
-            [
-                widget.CurrentLayout(),
-                widget.GroupBox(
-                    font="Ubuntu Bold",
-                    fontsize=12,
-                    margin_y=3,
-                    margin_x=0,
-                    padding_y=5,
-                    padding_x=3,
-                    borderwidth=3,
-                    active=colors[2],
-                    inactive=colors[3],
-                    rounded=False,
-                    highlight_color=colors[1],
-                    highlight_method="line",
-                    this_current_screen_border=colors[4],
-                    this_screen_border=colors[5],
-                    other_current_screen_border=colors[4],
-                    other_screen_border=colors[5],
-                ),
-                widget.Prompt(),
-                widget.WindowName(
-                    foreground=colors[6],
-                    padding=5,
-                    fontsize=15,
-                ),
-                widget.Chord(
-                    chords_colors={
-                        "launch": ("#ff0000", "#ffffff"),
-                    },
-                    name_transform=lambda name: name.upper(),
-                ),
-                widget.Systray(),
-                widget.Clock(format="%Y-%m-%d %a %I:%M %p", fontsize=15,
-                             ),
-                widget.Memory(measure_mem='G'), 
-                widget.Image(filename='~/Pictures/archlogo.png'),
-            ],
-            50,
-            background=colors[0]
-        ),
+        wallpaper="~/Pictures/apostle.png",
+        wallpaper_mode="fill",
+        top=make_bar(primary=True),
     ),
     Screen(
-        wallpaper='~/Pictures/second_wallpaper.png',  # Example wallpaper for the second monitor
-        wallpaper_mode='stretch',
-        top=bar.Bar(
-            [
-                widget.CurrentLayout(),
-                widget.GroupBox(
-                    font="Ubuntu Bold",
-                    fontsize=12,
-                    margin_y=3,
-                    margin_x=0,
-                    padding_y=5,
-                    padding_x=3,
-                    borderwidth=3,
-                    active=colors[2],
-                    inactive=colors[3],
-                    rounded=False,
-                    highlight_color=colors[1],
-                    highlight_method="line",
-                    this_current_screen_border=colors[4],
-                    this_screen_border=colors[5],
-                    other_current_screen_border=colors[4],
-                    other_screen_border=colors[5],
-                ),
-                widget.Prompt(),
-                widget.WindowName(
-                    foreground=colors[6],
-                    padding=5,
-                    fontsize=15,
-                ),
-                widget.Systray(),
-                widget.Clock(format="%Y-%m-%d %a %I:%M %p", fontsize=15),
-                widget.Memory(measure_mem='G'), 
-                widget.Image(filename='~/Pictures/second_archlogo.png'),
-            ],
-            50,
-            background=colors[0]
-        ),
+        wallpaper="~/Pictures/second_wallpaper.png",
+        wallpaper_mode="fill",
+        top=make_bar(),
     ),
 ]
 
