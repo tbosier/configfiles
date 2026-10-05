@@ -35,20 +35,6 @@ from libqtile.lazy import lazy
 def autostart():
     home = os.path.expanduser("~")
     subprocess.Popen(["/bin/sh", home + "/.config/qtile/autostart.sh"])
-    subprocess.Popen(
-        [
-            "xrandr",
-            "--output",
-            "HDMI-0",
-            "--primary",
-            "--auto",
-            "--output",
-            "DP-5",
-            "--auto",
-            "--right-of",
-            "HDMI-0",
-        ]
-    )
 
 
 mod = "mod4"
@@ -71,11 +57,22 @@ colors = {
     "teal": "#94e2d5",
 }
 
+# X11 has no clipboard daemon: whoever copies must stay alive to serve the
+# data. xclip was the last command in a foreground shell, so when that shell
+# exited xclip could be signalled away with it and the paste came back empty --
+# which is why this worked only sometimes.
+#
+# copyq, when running, takes ownership itself and keeps it. setsid -f detaches
+# xclip as a fallback so it survives the shell either way.
 screenshot_command = (
     "sh -c 'dir=\"$HOME/Pictures/Screenshots\"; mkdir -p \"$dir\"; "
     "file=\"$dir/$(date +%Y-%m-%d_%H-%M-%S).png\"; "
     "if maim -s \"$file\"; then "
-    "xclip -selection clipboard -t image/png -i \"$file\"; "
+    "if command -v copyq >/dev/null 2>&1; then "
+    "copyq write image/png - < \"$file\" >/dev/null && copyq select 0 >/dev/null; "
+    "else "
+    "setsid -f xclip -selection clipboard -t image/png -i \"$file\"; "
+    "fi; "
     "else rm -f \"$file\"; fi'"
 )
 
@@ -377,6 +374,60 @@ screens = [
     ),
 ]
 
+# ---------------------------------------------------------------------------
+# Screen-change handling
+#
+# qtile 0.37's built-in `reconfigure_screens = True` handler is not safe against
+# a transient screen_change event that reports zero connected outputs (monitor
+# DPMS/sleep, a cable renegotiating, a mode switch). When that happens,
+# Qtile._process_screens() falls into its
+#
+#     if len(new_screens) == 0:
+#         new_screens.append(Screen())
+#
+# fallback and replaces qtile.screens with a single bare Screen() that is never
+# _configure()d. That screen has no .group, no .index and no bar window, so the
+# top bar disappears and every later screen_change dies on
+# `[s.group for s in self.screens]` -- qtile can never recover on its own.
+#
+# So: keep qtile's handler switched off and drive reconfiguration ourselves,
+# ignoring empty-output events and healing any unconfigured screen we find.
+# ---------------------------------------------------------------------------
+reconfigure_screens = False
+
+
+@hook.subscribe.screen_change
+def _reconfigure_screens_safely(*_args, **_kwargs):
+    from libqtile import qtile as q  # resolved at call time, not import time
+    from libqtile.log_utils import logger
+
+    try:
+        outputs = q.get_output_info()
+    except Exception:
+        logger.exception("screen_change: could not read output info; ignoring")
+        return
+
+    if not outputs:
+        # Transient "no monitors" event. Reconfiguring here is what destroys the
+        # bar, so do nothing and wait for the event that reports real outputs.
+        logger.warning("screen_change reported no outputs; ignoring")
+        return
+
+    # Self-heal: drop any screen that never completed _configure(), otherwise
+    # _process_screens() raises on it and reconfiguration stays broken forever.
+    stale = [s for s in q.screens if not hasattr(s, "group")]
+    if stale:
+        logger.warning("dropping %d unconfigured screen(s) before reconfigure", len(stale))
+        q.screens[:] = [s for s in q.screens if hasattr(s, "group")]
+
+    try:
+        q.reconfigure_screens()
+    except Exception:
+        logger.exception("screen_change: reconfigure_screens failed; rebuilding screens")
+        q.screens.clear()
+        q.reconfigure_screens()
+
+
 # Drag floating layouts.
 mouse = [
     Drag([mod], "Button1", lazy.window.set_position_floating(), start=lazy.window.get_position()),
@@ -404,7 +455,7 @@ floating_layout = layout.Floating(
 )
 auto_fullscreen = True
 focus_on_window_activation = "smart"
-reconfigure_screens = True
+# reconfigure_screens is set above, next to the screen_change hook that replaces it.
 
 # If things like steam games want to auto-minimize themselves when losing
 # focus, should we respect this or not?

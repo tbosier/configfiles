@@ -6,6 +6,18 @@ return  {
    local builtin = require("telescope.builtin")
    vim.keymap.set('n','<C-p>',builtin.find_files, {})
    vim.keymap.set('n','<leader>fg', builtin.live_grep, {})
+   local function map(lhs, fn, desc) vim.keymap.set('n', lhs, fn, { desc = desc }) end
+   map('<leader>ff', builtin.find_files, 'Find file by name')
+   map('<leader>fw', builtin.grep_string, 'Grep word under cursor')
+   map('<leader>fb', builtin.buffers, 'Open buffers')
+   map('<leader>fo', builtin.oldfiles, 'Recent files')
+   map('<leader>fh', builtin.help_tags, 'Search :help')
+   map('<leader>fk', builtin.keymaps, 'Search all keymaps')
+   map('<leader>fr', builtin.lsp_references, 'Where is this used')
+   map('<leader>fs', builtin.lsp_document_symbols, 'Symbols in this file')
+   map('<leader>fS', builtin.lsp_dynamic_workspace_symbols, 'Symbols in project')
+   map('<leader>fd', builtin.diagnostics, 'Problems (fuzzy list)')
+   map('<leader>f.', builtin.resume, 'Reopen last search')
   end
   },
   {

@@ -19,7 +19,15 @@ vim.opt.rtp:prepend(lazypath)
 vim.keymap.set('n', '<leader>tt', ':belowright split | term<CR>', { noremap = true, silent = true })
 
 vim.keymap.set('t', '<Esc>', [[<C-\><C-n>]], { noremap = true }) -- Esc leaves terminal mode
-vim.keymap.set('n', '<C-h>', '<C-w>h')
+vim.keymap.set('n', '<C-h>', '<C-w>h', { desc = 'Window left' })
+vim.keymap.set('n', '<C-j>', '<C-w>j', { desc = 'Window below' })
+vim.keymap.set('n', '<C-k>', '<C-w>k', { desc = 'Window above' })
+vim.keymap.set('n', '<C-l>', '<C-w>l', { desc = 'Window right' })
+
+-- The cheat sheet: :Guide or <space>?
+local guide = vim.fn.stdpath('config') .. '/guide/commands.md'
+vim.api.nvim_create_user_command('Guide', function() vim.cmd.split(guide) end, { desc = 'Open my command guide' })
+vim.keymap.set('n', '<leader>?', '<cmd>Guide<CR>', { desc = 'Open my command guide' })
 
 
 vim.opt.number = true
