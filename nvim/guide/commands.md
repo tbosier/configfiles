@@ -18,8 +18,9 @@ That's Neovim (Neo-tree), not qtile.
 | Key | Does |
 |---|---|
 | `Space e` | Open the file tree on the left, on the current file |
-| `Space 1` / `Space 2` | Move one window left / right (the tree is the leftmost window) |
-| `Ctrl h` / `Ctrl l` | Same idea: move to the window on the left / right |
+| `Ctrl h` / `Ctrl l` | Tree and code: move to the window on the left / right. Works from inside the tree too |
+| `Ctrl w p` | Jump back to the window you were just in |
+| `Space 1` / `Space 2` | Same as `Ctrl h` / `Ctrl l`, but only from the code: inside the tree, Space opens folders |
 
 Inside the tree (careful: here `d` deletes the file, and `y`/`p` copy and
 paste files, not text):
